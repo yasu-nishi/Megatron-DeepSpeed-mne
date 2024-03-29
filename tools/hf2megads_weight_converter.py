@@ -17,6 +17,9 @@ from megatron.checkpointing import save_checkpoint
 from megatron.training import get_optimizer_param_scheduler
 from deepspeed.runtime.utils import see_memory_usage
 import deepspeed
+import os
+
+MASTER_PORT = os.environ.get('MASTER_PORT', '29600') # デフォルトは29500
 
 
 def add_extra_args(parser):
@@ -27,6 +30,7 @@ def add_extra_args(parser):
                        type=str,
                        default="",
                        help="the original path of the llama-hf ckpt")
+              
     return parser
 
 
@@ -42,15 +46,21 @@ def load_and_print_hf_weight(hf_ckpt_dir, hf_ckpt_num_of_shards):
     loaded = {}
     print_rank_0(
         f"----------------------------hf weight list----------------------------")
-
+    
     for wid in range(1, hf_ckpt_num_of_shards + 1):
-        d = torch.load(
-            f"{hf_ckpt_dir}/pytorch_model-{wid:05d}-of-{hf_ckpt_num_of_shards:05d}.bin",
-            map_location=torch.device('cpu'))
+        if hf_ckpt_num_of_shards == 1:
+            d = torch.load(
+                f"{hf_ckpt_dir}/pytorch_model.bin",
+                map_location=torch.device('cpu'))
+        else:
+            d = torch.load(
+                f"{hf_ckpt_dir}/pytorch_model-{wid:05d}-of-{hf_ckpt_num_of_shards:05d}.bin",
+                map_location=torch.device('cpu'))
         for k in d:
             print_rank_0(k)
             assert k not in loaded
             loaded[k] = d[k].clone()
+            d[k] = 0
     del d
     return loaded
 
@@ -279,6 +289,7 @@ def convert_hf_to_mega_ds():
     see_memory_usage(f"Before Building Model", force=True)
 
     config = core_transformer_config_from_args(args)
+    print('convert : config')
     with deepspeed.zero.Init(
             data_parallel_group=mpu.get_data_parallel_group(),
             remote_device=None if args.remote_device == 'none' else args.remote_device,
@@ -289,25 +300,32 @@ def convert_hf_to_mega_ds():
             model = GPTModelPipe(config, num_tokentypes=0, parallel_output=True)
         else:
             raise NotImplementedError("Not implemented")
+    print('convert : deepspeed zero init')
 
     see_memory_usage(f"After Building Model", force=True)
     if torch.distributed.get_rank() < 2:
         print(f"{torch.distributed.get_rank()} {model}")
+    print('convert : see memory usage')
 
     # load and initialize HF weight dict
     # print hf weights list & mega-ds weights list
     hf_ckpt_dir = args.origin_hf_ckpt_dir
+    print('convert : hf ckpt dir')
     hf_ckpt_num_of_shards = args.hf_ckpt_num_shards
+    print('convert : hf ckpt num of shards')
     loaded = load_and_print_hf_weight(hf_ckpt_dir, hf_ckpt_num_of_shards)
+    print('convert : loaded')
     print_distinct_weights(model)
-
+    print('convert : distinct')
     # refactor weight from hf to mega-ds
 
     cur_refactor = refactor(model, loaded, args, config)
+    print('convert : cur_refactor')
     cur_refactor.refactor()
     cur_refactor.inorder_show_record()
 
     del loaded
+    print('del load')
 
     unwrapped_model = unwrap_model([model], (torchDDP, LocalDDP, Float16Module))
     optimizer = get_megatron_optimizer(unwrapped_model)
@@ -329,6 +347,6 @@ def convert_hf_to_mega_ds():
 
 
 if __name__ == "__main__":
-
     initialize_megatron(extra_args_provider=add_extra_args)
+    print(f'initialization is done')
     convert_hf_to_mega_ds()

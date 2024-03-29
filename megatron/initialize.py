@@ -71,6 +71,7 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
         _set_random_seed(args.seed, args.data_parallel_random_init)
 
     args = get_args()
+    print(f"t : {args}")
     if  args.lazy_mpu_init:
         # TODO is this still a necessary option?
         args.use_cpu_initialization=True

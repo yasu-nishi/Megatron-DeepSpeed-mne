@@ -297,10 +297,9 @@ def validate_args(args, defaults={}):
     else:
         assert args.encoder_seq_length is not None
         args.seq_length = args.encoder_seq_length
-
     if not args.use_dataset_only:
         if args.seq_length is not None:
-            assert args.max_position_embeddings >= args.seq_length
+            assert args.max_position_embeddings < args.seq_length
         if args.decoder_seq_length is not None:
             assert args.max_position_embeddings >= args.decoder_seq_length
     # When rotary position embeddings is used, set add_position_embedding

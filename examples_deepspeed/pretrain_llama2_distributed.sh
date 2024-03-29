@@ -4,7 +4,7 @@ set -ex
 
 ######################################
 # Change the below configurations here
-BASE_PATH=./tmp
+BASE_PATH=../examples_deepspeed/finetune_hf_llama/ds_config.json
 DS_CONFIG=${BASE_PATH}/deepspeed.json
 DATASET_1="./tmp/data/bookcorpus_train_1m_text_sentence"
 DATASET="1 ${DATASET_1}"
@@ -118,9 +118,9 @@ torchrun $DISTRIBUTED_ARGS \
        --optimizer adam \
        --adam-beta1 0.9 \
        --adam-beta2 0.95 \
-       --log-interval 1 \
-       --save-interval 10000 \
-       --eval-interval 1000 \
+       --log-interval 10 \
+       --save-interval 100 \
+       --eval-interval 100 \
        --eval-iters 10 \
        --bf16 \
        --no-query-key-layer-scaling \
